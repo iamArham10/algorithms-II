@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CheckStyle-IDEA" serialisationVersion="2">
+    <checkstyleVersion>10.12.7</checkstyleVersion>
+    <scanScope>JavaOnly</scanScope>
+    <option name="thirdPartyClasspath">
+      <option value="C:\Users\Win 10\Documents\GitHub\Algorithms II\Module_3\Wordnet\.lift\checkstyle-lift.jar" />
+    </option>
+    <option name="activeLocationIds">
+      <option value="f5d68185-9fc9-40ee-8ea0-c8d248459dbf" />
+    </option>
+    <option name="locations">
+      <list>
+        <ConfigurationLocation id="bundled-sun-checks" type="BUNDLED" scope="All" description="Sun Checks">(bundled)</ConfigurationLocation>
+        <ConfigurationLocation id="bundled-google-checks" type="BUNDLED" scope="All" description="Google Checks">(bundled)</ConfigurationLocation>
+        <ConfigurationLocation id="f5d68185-9fc9-40ee-8ea0-c8d248459dbf" type="LOCAL_FILE" scope="All" description="Coursera Checks">
+          $PROJECT_DIR$/.lift/checkstyle-coursera.xml
+          <option name="properties">
+            <map>
+              <entry key="basedir" value="$PROJECT_DIR$" />
+              <entry key="suppressions" value="checkstyle-suppressions.xml" />
+            </map>
+          </option>
+        </ConfigurationLocation>
+      </list>
+    </option>
+  </component>
+</project>
