@@ -2,7 +2,9 @@ import edu.princeton.cs.algs4.Digraph;
 import edu.princeton.cs.algs4.Queue;
 import edu.princeton.cs.algs4.Stack;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class SAP {
     private final Digraph G;
@@ -20,30 +22,66 @@ public class SAP {
     private int shortestCommonAncestor;
     private int shortestCommonAncestorPath;
 
+    private final Map<String, String> queryCache;
+
     public SAP(Digraph G) {
-        this.G = new Digraph(G); // Make a defensive copy
+        this.G = new Digraph(G);
         vEdgeTo = new int[G.V()];
         wEdgeTo = new int[G.V()];
-        for (int i = 0; i < G.V(); i++) {
+            for (int i = 0; i < G.V(); i++) {
             // none of them are marked
             vEdgeTo[i] = -1;
             wEdgeTo[i] = -1;
         }
         vMarked = new Stack<>();
         wMarked = new Stack<>();
+        queryCache = new HashMap<>();
     }
 
     public int length(int v, int w) {
         validateVertex(v);
         validateVertex(w);
+        String Key = buildCacheKey(v, w);
+        if (queryCache.containsKey(Key)) {
+            String result =  queryCache.get(Key);
+            return  Integer.parseInt(result.split(",")[1]);
+        }
         findSAP(List.of(v), List.of(w));
+        queryCache.put(Key, Integer.toString(shortestCommonAncestor) +  "," + Integer.toString(shortestCommonAncestorPath));
         return shortestCommonAncestorPath;
+    }
+
+    private String buildCacheKey(int v, int w) {
+        return Integer.toString(v) + "," + "|" + Integer.toString(w) + ",";
+    }
+
+    private String buildCacheKey(Iterable<Integer> v, Iterable<Integer> w) {
+        StringBuilder sb = new StringBuilder();
+
+         for (Integer vv : v) {
+            sb.append(vv);
+            sb.append(",");
+        }
+
+        // adding the separator
+        sb.append("|");
+
+        for (Integer ww : w) {
+            sb.append(ww);
+            sb.append(",");
+        }
+        return sb.toString();
     }
 
     public int ancestor(int v, int w) {
         validateVertex(v);
         validateVertex(w);
+        String key = buildCacheKey(v, w);
+        if (queryCache.containsKey(key)) {
+            return Integer.parseInt(queryCache.get(key).split(",")[0]);
+        }
         findSAP(List.of(v), List.of(w));
+        queryCache.put(key, Integer.toString(shortestCommonAncestor) + "," + Integer.toString(shortestCommonAncestorPath));
         return shortestCommonAncestor;
     }
 
@@ -112,14 +150,25 @@ public class SAP {
     public int length(Iterable<Integer> v, Iterable<Integer> w) {
         validateVertices(v);
         validateVertices(w);
+        String query = buildCacheKey(v, w);
+        if (queryCache.containsKey(query)) {
+            return Integer.parseInt(queryCache.get(query).split(",")[1]);
+        }
         findSAP(v, w);
+        queryCache.put(query, Integer.toString(shortestCommonAncestor) + "," +
+                Integer.toString(shortestCommonAncestorPath));
         return shortestCommonAncestorPath;
     }
 
     public int ancestor(Iterable<Integer> v, Iterable<Integer> w) {
         validateVertices(v);
         validateVertices(w);
+        String query = buildCacheKey(v, w);
+        if (queryCache.containsKey(query)) {
+            return  Integer.parseInt(queryCache.get(query).split(",")[0]);
+        }
         findSAP(v, w);
+        queryCache.put(query, Integer.toString(shortestCommonAncestor) + "," + Integer.toString(shortestCommonAncestorPath));
         return shortestCommonAncestor;
     }
 
@@ -128,8 +177,7 @@ public class SAP {
             // Process one level from v's BFS
             if (!vQueue.isEmpty()) {
                 int node = vQueue.dequeue();
-                for (Integer w : G.adj(node)) {
-                    // If w is visited by wQueue then it's common ancestor
+                for (Integer w : G.adj(node)) { // If w is visited by wQueue then it's common ancestor
                     if (wEdgeTo[w] != -1) {
                         // w is the common ancestor, first one found in alternating BFS is guaranteed shortest
                         shortestCommonAncestor = w;
@@ -149,12 +197,13 @@ public class SAP {
             // Process one level from w's BFS
             if (!wQueue.isEmpty()) {
                 int node = wQueue.dequeue();
-                for (int v : G.adj(node)) {
+                for (Integer v : G.adj(node)) {
                     if (vEdgeTo[v] != -1) {
                         // v is visited by vQueue, then it's common ancestor
                         shortestCommonAncestor = v;
                         wEdgeTo[v] = node;
                         wMarked.push(v);
+
                         return;
                     }
                     else if (wEdgeTo[v] == -1) {
