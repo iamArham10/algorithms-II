@@ -1,259 +1,300 @@
 import edu.princeton.cs.algs4.Digraph;
 import edu.princeton.cs.algs4.Queue;
-import edu.princeton.cs.algs4.Stack;
+import edu.princeton.cs.algs4.Bag;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 
 public class SAP {
-    private final Digraph G;
+    private static final class BfsCache {
+        private final LinkedHashMap<String, String> cache;
+        private final int capacity;
 
-    // marks nodes that are reachable from bfs starting from v
-    private final int[] vEdgeTo;
+        public BfsCache(int capacity) {
+            this.capacity = capacity;
+            this.cache = new LinkedHashMap<String, String>(capacity, (float) 0.75, true);
+        }
 
-    // marks nodes that are reachable from bfs starting from u
-    private final int[] wEdgeTo;
+        private String createCacheKey(Iterable<Integer> vNodes, Iterable<Integer> wNodes) {
+            StringBuilder key = new StringBuilder();
+            for (int v: vNodes) {
+                key.append(v).append("|");
+            }
+            key.append(":");
+            for (int w: wNodes) {
+                key.append(w).append("|");
+            }
+            return key.toString();
+        }
 
-    // stores nodes that are visited from current query
-    private final Stack<Integer> vMarked;
-    private final Stack<Integer> wMarked;
+        public String getValue(Iterable<Integer> vNodes, Iterable<Integer> wNodes) {
+            String cacheKey = createCacheKey(vNodes, wNodes);
+            if (cache.size() >= capacity) {
+                String firstKey = cache.keySet().iterator().next();
+                cache.remove(firstKey);
+            }
+            return cache.get(cacheKey);
+        }
 
+        public void setValue(Iterable<Integer> vNodes, Iterable<Integer> wNodes,
+                             int commonAncestor, int pathLength) {
+            String cacheKey = createCacheKey(vNodes, wNodes);
+            cache.put(cacheKey, commonAncestor + "," + pathLength);
+        }
+    }
+
+    private final Digraph digraph;
+    private int[] distFromV;
+    private int[] distFromW;
+    private Bag<Integer> vEntriesChanged;
+    private Bag<Integer> wEntriesChanged;
     private int shortestCommonAncestor;
-    private int shortestCommonAncestorPath;
-
-    private final Map<String, String> queryCache;
+    private int shortestCommonLength;
+    private final BfsCache cache;
 
     public SAP(Digraph G) {
-        this.G = new Digraph(G);
-        vEdgeTo = new int[G.V()];
-        wEdgeTo = new int[G.V()];
-            for (int i = 0; i < G.V(); i++) {
-            // none of them are marked
-            vEdgeTo[i] = -1;
-            wEdgeTo[i] = -1;
-        }
-        vMarked = new Stack<>();
-        wMarked = new Stack<>();
-        queryCache = new HashMap<>();
+        if (G == null) throw new IllegalArgumentException("Digraph cannot be null");
+        this.digraph = new Digraph(G);
+        cache = new BfsCache(G.V() + G.E());
+        distFromV = new int[G.V()];
+        distFromW = new int[G.V()];
+        Arrays.fill(distFromV, -1);
+        Arrays.fill(distFromW, -1);
+        vEntriesChanged = new Bag<>();
+        wEntriesChanged = new Bag<>();
+        shortestCommonAncestor = -1;
+        shortestCommonLength = Integer.MAX_VALUE;
     }
 
     public int length(int v, int w) {
         validateVertex(v);
         validateVertex(w);
-        String Key = buildCacheKey(v, w);
-        if (queryCache.containsKey(Key)) {
-            String result =  queryCache.get(Key);
-            return  Integer.parseInt(result.split(",")[1]);
-        }
-        findSAP(List.of(v), List.of(w));
-        queryCache.put(Key, Integer.toString(shortestCommonAncestor) +  "," + Integer.toString(shortestCommonAncestorPath));
-        return shortestCommonAncestorPath;
-    }
 
-    private String buildCacheKey(int v, int w) {
-        return Integer.toString(v) + "," + "|" + Integer.toString(w) + ",";
-    }
+        String value = cache.getValue(Collections.singletonList(v), Collections.singletonList(w));
 
-    private String buildCacheKey(Iterable<Integer> v, Iterable<Integer> w) {
-        StringBuilder sb = new StringBuilder();
-
-         for (Integer vv : v) {
-            sb.append(vv);
-            sb.append(",");
+        if (value != null) {
+            return Integer.parseInt(value.split(",")[1]);
         }
 
-        // adding the separator
-        sb.append("|");
+        resetQueryState();
+        Queue<Integer> vQueue = new Queue<>();
+        Queue<Integer> wQueue = new Queue<>();
 
-        for (Integer ww : w) {
-            sb.append(ww);
-            sb.append(",");
+        vQueue.enqueue(v);
+        distFromV[v] = 0;
+        vEntriesChanged.add(v);
+
+        wQueue.enqueue(w);
+        distFromW[w] = 0;
+        wEntriesChanged.add(w);
+
+        runAlternatingBreadthFirstSearch(vQueue, wQueue);
+        if (this.shortestCommonLength != Integer.MAX_VALUE) {
+            cache.setValue(Collections.singletonList(v), Collections.singletonList(w),
+                           shortestCommonAncestor, shortestCommonLength);
+            return shortestCommonLength;
         }
-        return sb.toString();
+        return -1;
     }
 
     public int ancestor(int v, int w) {
         validateVertex(v);
         validateVertex(w);
-        String key = buildCacheKey(v, w);
-        if (queryCache.containsKey(key)) {
-            return Integer.parseInt(queryCache.get(key).split(",")[0]);
-        }
-        findSAP(List.of(v), List.of(w));
-        queryCache.put(key, Integer.toString(shortestCommonAncestor) + "," + Integer.toString(shortestCommonAncestorPath));
-        return shortestCommonAncestor;
-    }
 
-    private void findSAP(Iterable<Integer> v, Iterable<Integer> w) {
-        // Clear previous state
-        while (!vMarked.isEmpty()) {
-            vEdgeTo[vMarked.pop()] = -1;
+        String value = cache.getValue(Collections.singletonList(v), Collections.singletonList(w));
+        if (value != null) {
+            return Integer.parseInt(value.split(",")[0]);
         }
-        while (!wMarked.isEmpty()) {
-            wEdgeTo[wMarked.pop()] = -1;
-        }
-        shortestCommonAncestor = -1;
-        shortestCommonAncestorPath = -1;
 
-        // running two bfs alternatively
+        resetQueryState();
         Queue<Integer> vQueue = new Queue<>();
         Queue<Integer> wQueue = new Queue<>();
 
-        for (Integer i : v) {
-            validateVertex(i);
-            vQueue.enqueue(i);
-            vMarked.push(i);
-            vEdgeTo[i] = 0;
-        }
+        vQueue.enqueue(v);
+        distFromV[v] = 0;
+        vEntriesChanged.add(v);
 
-        for (Integer i : w) {
-            validateVertex(i);
-            wQueue.enqueue(i);
-            wMarked.push(i);
-            wEdgeTo[i] = 0;
+        wQueue.enqueue(w);
+        distFromW[w] = 0;
+        wEntriesChanged.add(w);
 
-            // Check if this vertex is already in the first set (immediate common ancestor)
-            if (vEdgeTo[i] != -1) {
-                shortestCommonAncestor = i;
-                shortestCommonAncestorPath = 0;  // Direct path from v to w
-                return;
-            }
-        }
-
-        bfs(vQueue, wQueue);
-
+        runAlternatingBreadthFirstSearch(vQueue, wQueue);
         if (shortestCommonAncestor != -1) {
-            shortestCommonAncestorPath = backTrack();
+            cache.setValue(Collections.singletonList(v), Collections.singletonList(w),
+                           this.shortestCommonAncestor, this.shortestCommonLength);
         }
-    }
-
-    private int backTrack() {
-        int ancestor = shortestCommonAncestor;
-        int distance = 0;
-
-        // Calculate distance from v to ancestor
-        while (vEdgeTo[ancestor] != 0) {
-            distance++;
-            ancestor = vEdgeTo[ancestor];
-        }
-
-        ancestor = shortestCommonAncestor;
-        while (wEdgeTo[ancestor] != 0) {
-            distance++;
-            ancestor = wEdgeTo[ancestor];
-        }
-
-        return distance;
+        return this.shortestCommonAncestor;
     }
 
     public int length(Iterable<Integer> v, Iterable<Integer> w) {
         validateVertices(v);
         validateVertices(w);
-        String query = buildCacheKey(v, w);
-        if (queryCache.containsKey(query)) {
-            return Integer.parseInt(queryCache.get(query).split(",")[1]);
+
+        String value = cache.getValue(v, w);
+        if (value != null) {
+            return Integer.parseInt(value.split(",")[1]);
         }
-        findSAP(v, w);
-        queryCache.put(query, Integer.toString(shortestCommonAncestor) + "," +
-                Integer.toString(shortestCommonAncestorPath));
-        return shortestCommonAncestorPath;
+        resetQueryState();
+        Queue<Integer> vQueue = new Queue<>();
+        Queue<Integer> wQueue = new Queue<>();
+
+        for (int vNode: v) {
+            vQueue.enqueue(vNode);
+            distFromV[vNode] = 0;
+            vEntriesChanged.add(vNode);
+        }
+        for (int wNode: w) {
+            wQueue.enqueue(wNode);
+            distFromW[wNode] = 0;
+            wEntriesChanged.add(wNode);
+        }
+
+        runAlternatingBreadthFirstSearch(vQueue, wQueue);
+        if (this.shortestCommonLength != Integer.MAX_VALUE) {
+            cache.setValue(v, w, this.shortestCommonAncestor, shortestCommonLength);
+            return shortestCommonLength;
+        }
+        return -1;
     }
 
     public int ancestor(Iterable<Integer> v, Iterable<Integer> w) {
         validateVertices(v);
         validateVertices(w);
-        String query = buildCacheKey(v, w);
-        if (queryCache.containsKey(query)) {
-            return  Integer.parseInt(queryCache.get(query).split(",")[0]);
+
+        String value = cache.getValue(v, w);
+        if (value != null) {
+            return Integer.parseInt(value.split(",")[0]);
         }
-        findSAP(v, w);
-        queryCache.put(query, Integer.toString(shortestCommonAncestor) + "," + Integer.toString(shortestCommonAncestorPath));
-        return shortestCommonAncestor;
+
+        resetQueryState();
+        Queue<Integer> vQueue = new Queue<>();
+        Queue<Integer> wQueue = new Queue<>();
+
+        for (int vNode: v) {
+            vQueue.enqueue(vNode);
+            distFromV[vNode] = 0;
+            vEntriesChanged.add(vNode);
+        }
+
+        for (int wNode: w) {
+            wQueue.enqueue(wNode);
+            distFromW[wNode] = 0;
+            wEntriesChanged.add(wNode);
+        }
+
+        runAlternatingBreadthFirstSearch(vQueue, wQueue);
+        if (this.shortestCommonAncestor != -1) {
+            cache.setValue(v, w, this.shortestCommonAncestor, this.shortestCommonLength);
+        }
+        return this.shortestCommonAncestor;
     }
 
-    private void bfs(Queue<Integer> vQueue, Queue<Integer> wQueue) {
-        while (!vQueue.isEmpty() || !wQueue.isEmpty()) {
-            // Process one level from v's BFS
-            if (!vQueue.isEmpty()) {
-                int node = vQueue.dequeue();
-                for (Integer w : G.adj(node)) { // If w is visited by wQueue then it's common ancestor
-                    if (wEdgeTo[w] != -1) {
-                        // w is the common ancestor, first one found in alternating BFS is guaranteed shortest
-                        shortestCommonAncestor = w;
-                        vEdgeTo[w] = node;
-                        vMarked.push(w);
-                        return;
+    /**
+     *  Resets the modified distance entries from previous query
+     */
+    private void resetQueryState() {
+        // Reset all V-side distances that were changed
+        for (int vertex: vEntriesChanged) {
+            this.distFromV[vertex] = -1;
+        }
+
+        // Reset all W-side distances that were changed
+        for (int vertex: wEntriesChanged) {
+            this.distFromW[vertex] = -1;
+        }
+
+        vEntriesChanged = new Bag<>();
+        wEntriesChanged = new Bag<>();
+
+        this.shortestCommonLength = Integer.MAX_VALUE;
+        this.shortestCommonAncestor = -1;
+    }
+
+    /**
+     * Runs alternating BFS from v nodes and w nodes, finds the
+     * shortest common path distance
+     * @param v Queue containing source v nodes
+     * @param w Queue containing source w nodes
+     */
+    private void runAlternatingBreadthFirstSearch(Queue<Integer> v, Queue<Integer> w) {
+        while (!v.isEmpty() || !w.isEmpty()) {
+            // BFS from source v step
+            if (!v.isEmpty()) {
+                int vertex = v.dequeue();
+                // Check if vertex is common with w BFS
+                if (this.distFromW[vertex] != -1) {
+                    // Calculate the distance
+                    int distance = this.distFromW[vertex] + this.distFromV[vertex];
+                    if (this.shortestCommonLength > distance) {
+                        this.shortestCommonAncestor = vertex;
+                        this.shortestCommonLength = distance;
                     }
-                    else if (vEdgeTo[w] == -1) {
-                        // w is not visited by this bfs add it to queue
-                        vQueue.enqueue(w);
-                        vEdgeTo[w] = node;
-                        vMarked.push(w);
+                }
+                for (int neighbor: this.digraph.adj(vertex)) {
+                    if (this.distFromV[neighbor] == -1) {
+                        this.distFromV[neighbor] = this.distFromV[vertex] + 1;
+                        v.enqueue(neighbor);
+                        vEntriesChanged.add(neighbor);
                     }
                 }
             }
 
-            // Process one level from w's BFS
-            if (!wQueue.isEmpty()) {
-                int node = wQueue.dequeue();
-                for (Integer v : G.adj(node)) {
-                    if (vEdgeTo[v] != -1) {
-                        // v is visited by vQueue, then it's common ancestor
-                        shortestCommonAncestor = v;
-                        wEdgeTo[v] = node;
-                        wMarked.push(v);
-
-                        return;
+            // BFS from source w step
+            if (!w.isEmpty()) {
+                int vertex = w.dequeue();
+                // Check if vertex is common with v BFS
+                if (this.distFromV[vertex] != -1) {
+                    int distance = this.distFromV[vertex] + this.distFromW[vertex];
+                    if (this.shortestCommonLength > distance) {
+                        this.shortestCommonAncestor = vertex;
+                        this.shortestCommonLength = distance;
                     }
-                    else if (wEdgeTo[v] == -1) {
-                        // node is not visited by current queue bfs
-                        wQueue.enqueue(v);
-                        wEdgeTo[v] = node;
-                        wMarked.push(v);
+                }
+                for (int neighbor: this.digraph.adj(vertex)) {
+                    if (this.distFromW[neighbor] == -1) {
+                        this.distFromW[neighbor] = this.distFromW[vertex] + 1;
+                        w.enqueue(neighbor);
+                        wEntriesChanged.add(neighbor);
                     }
-
                 }
             }
         }
-
-        // No common ancestor found
-        shortestCommonAncestor = -1;
     }
 
-    private void validateVertex(int v) {
-        int V = G.V();
-        if (v < 0 || v >= V) {
-            throw new IllegalArgumentException("vertex " + v + " is not between 0 and " + (V - 1));
-        }
+    /**
+     * Validate the given vertex between 0 and V-1
+     * @param vertex vertex id
+     */
+    private void validateVertex(int vertex) {
+        if (vertex < 0 || vertex >= digraph.V())
+            throw new IllegalArgumentException("vertex " + vertex + " is not between 0 and " + (digraph.V()-1));
     }
 
-    public void validateVertices(Iterable<Integer> vertices) {
-        if (vertices == null) {
-            throw new IllegalArgumentException("argument is null");
-        }
-        for (Integer v : vertices) {
-            if (v == null) {
-                throw new IllegalArgumentException("vertex is null");
-            }
+    /**
+     * Validate the given vertices between 0 and V-1
+     * @param vertices iterable of vertices
+     */
+    private void validateVertices(Iterable<Integer> vertices) {
+        if (vertices == null) throw new IllegalArgumentException("vertices cannot be null");
+        for (Integer v: vertices) {
+            if (v == null) throw new IllegalArgumentException("vertex cannot be null");
             validateVertex(v);
         }
     }
 
     public static void main(String[] args) {
-        Digraph g = new Digraph(12);
-        g.addEdge(10, 9);
-        g.addEdge(11, 9);
-        g.addEdge(8, 5);
-        g.addEdge(9, 5);
-        g.addEdge(5, 1);
-        g.addEdge(4, 1);
-        g.addEdge(7, 3);
-        g.addEdge(6, 3);
-        g.addEdge(3, 1);
+        Digraph g = new Digraph(6);
         g.addEdge(1, 0);
-        g.addEdge(2, 0);
+        g.addEdge(2, 1);
+        g.addEdge(0, 3);
+        g.addEdge(2, 4);
+        g.addEdge(3, 4);
+        g.addEdge(3, 5);
         SAP sap = new SAP(g);
-        System.out.println(sap.ancestor(List.of(3, 7, 6, 1), List.of(10, 11, 2)));
+        int length = sap.length(2, 0);
+        int ancestor = sap.ancestor(2, 0);
+        System.out.println("Length: " + length);
+        System.out.println("Ancestor: " + ancestor);
     }
 }
