@@ -193,22 +193,22 @@ public class SAP {
     /**
      *  Resets the modified distance entries from previous query
      */
-    private void resetQueryState() {
-        // Reset all V-side distances that were changed
-        for (int vertex: vEntriesChanged) {
-            this.distFromV[vertex] = -1;
-        }
+     private void resetQueryState() {
+         // Reset all V-side distances that were changed
+         for (int vertex: vEntriesChanged) {
+             this.distFromV[vertex] = -1;
+         }
 
-        // Reset all W-side distances that were changed
-        for (int vertex: wEntriesChanged) {
-            this.distFromW[vertex] = -1;
-        }
+         // Reset all W-side distances that were changed
+         for (int vertex: wEntriesChanged) {
+             this.distFromW[vertex] = -1;
+         }
 
-        vEntriesChanged = new Bag<>();
-        wEntriesChanged = new Bag<>();
+         vEntriesChanged = new Bag<>();
+         wEntriesChanged = new Bag<>();
 
-        this.shortestCommonLength = Integer.MAX_VALUE;
-        this.shortestCommonAncestor = -1;
+         this.shortestCommonLength = Integer.MAX_VALUE;
+         this.shortestCommonAncestor = -1;
     }
 
     /**
@@ -218,6 +218,7 @@ public class SAP {
      * @param w Queue containing source w nodes
      */
     private void runAlternatingBreadthFirstSearch(Queue<Integer> v, Queue<Integer> w) {
+        // op that was really good with us and with them as well 
         while (!v.isEmpty() || !w.isEmpty()) {
             // BFS from source v step
             if (!v.isEmpty()) {
