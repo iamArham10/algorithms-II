@@ -78,6 +78,18 @@ public class ShortestPathWithSkippableEdge {
     }
 
     public static void main(String[] args) {
+        EdgeWeightedDigraph g = new EdgeWeightedDigraph(4);
+        g.addEdge(new DirectedEdge(0, 1, 1));
+        g.addEdge(new DirectedEdge(0, 3, 1));
+        g.addEdge(new DirectedEdge(3, 2, 2));
+        g.addEdge(new DirectedEdge(1, 2, 1));
 
+        ShortestPathWithSkippableEdge sp = new ShortestPathWithSkippableEdge(g, 0, 2);
+        System.out.println("Second shortest distance: " + sp.getpathDistance());
+        for (DirectedEdge e : sp.getPath()) {
+            System.out.println(e.from() + " to " + e.to() + " (" + e.weight() + ")");
+        }
+        DirectedEdge e = sp.getSkippedEdge();
+        System.out.println("Skipped Edge: " + e.from() + " to " + e.to() + " (" + e.weight() + ")");
     }
 }
